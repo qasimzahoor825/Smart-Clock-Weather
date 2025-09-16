@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Clock Weather UI</title>
+    <style>
+         :root {
+            --day-bg: linear-gradient(to bottom right, #74ebd5, #9face6);
+            --night-bg: linear-gradient(to bottom right, #1c1c3c, #34345a);
+        }
+        
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+            min-height: 100vh;
+            background: var(--day-bg);
+            color: white;
+            transition: background 0.5s;
+        }
+        
+        header {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        
+        #clock {
+            font-size: 48px;
+            margin: 10px 0;
+        }
+        
+        #date {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        
+        .weather-box,
+        #forecast {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 20px;
+            border-radius: 12px;
+            max-width: 400px;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        
+        input {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            width: 70%;
+            font-size: 16px;
+        }
+        
+        button {
+            padding: 10px 15px;
+            border: none;
+            background: #ff9800;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        
+        button:hover {
+            background: #e68900;
+        }
+        
+        .forecast-item {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <header>🌦 Smart Clock Weather UI</header>
+
+    <div class="weather-box">
+        <input type="text" id="cityInput" placeholder="Enter city name...">
+        <button onclick="searchCity()">Check Weather</button>
+        <div id="weather">Weather info will appear here...</div>
+    </div>
+
+    <div id="clock">--:--:--</div>
+    <div id="date">Loading date...</div>
+
+    <div id="forecast">Forecast will appear here...</div>
+    <button id="speak-time">Speak Time</button>
+
+    <script>
+        const API_KEY = "YOUR_API_KEY"; //  Replace with  OpenWeatherMap API key
+
+        // Clock & Date
+        function updateClock() {
+            const now = new Date();
+            document.getElementById("clock").textContent = now.toLocaleTimeString(undefined, {
+                hour12: false
+            });
+            document.getElementById("date").textContent = now.toLocaleDateString(undefined, {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+
+            // Day/night theme
+            const hour = now.getHours();
+            document.body.style.background = (hour >= 6 && hour < 18) ?
+                getComputedStyle(document.documentElement).getPropertyValue('--day-bg') :
+                getComputedStyle(document.documentElement).getPropertyValue('--night-bg');
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Speak Time
+        document.getElementById("speak-time").onclick = () => {
+            const time = new Date().toLocaleTimeString();
+            const msg = new SpeechSynthesisUtterance("The time is " + time);
+            speechSynthesis.speak(msg);
+        };
+
+        // Search city
+        function searchCity() {
+            const city = document.getElementById("cityInput").value.trim();
+            if (!city) return alert("Please enter a city name!");
+            getWeather(city);
+            getForecast(city);
+        }
+
+        // Fetch current weather
+        async function getWeather(city) {
+            try {
+                const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.cod === 200) {
+                    document.getElementById("weather").innerHTML = `
+            <h2>${data.name}, ${data.sys.country}</h2>
+            <img src="https://openweathermap.org/img/wn/${data.weather[0].icon}@2x.png" alt="icon" />
+            <p> Temp: ${Math.round(data.main.temp)} °C</p>
+            <p> Weather: ${data.weather[0].description}</p>
+            <p> Wind: ${data.wind.speed} m/s</p>
+          `;
+                } else {
+                    document.getElementById("weather").innerHTML = "<p> City not found!</p>";
+                }
+            } catch (error) {
+                console.error(error);
+                document.getElementById("weather").innerHTML = "<p> Failed to fetch weather data!</p>";
+            }
+        }
+
+        // Fetch 3-day forecast
+        async function getForecast(city) {
+            try {
+                const url = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${API_KEY}&units=metric`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (!data || !data.list) {
+                    document.getElementById("forecast").innerHTML = " Forecast unavailable.";
+                    return;
+                }
+
+                const daily = {};
+                data.list.forEach(item => {
+                    const [date, time] = item.dt_txt.split(" ");
+                    if (!daily[date] && time === "12:00:00" && Object.keys(daily).length < 3) {
+                        daily[date] = item;
+                    }
+                });
+
+                let forecastHTML = "<strong>3-Day Forecast:</strong><br>";
+                for (const date in daily) {
+                    const item = daily[date];
+                    forecastHTML += `
+            <div class="forecast-item">
+              <strong>${date}</strong><br>
+              <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}.png" alt="icon" />
+              ${Math.round(item.main.temp)}°C, ${item.weather[0].description}<br>
+            </div>
+          `;
+                }
+                document.getElementById("forecast").innerHTML = forecastHTML;
+            } catch (error) {
+                console.error(error);
+                document.getElementById("forecast").innerHTML = "<p> Failed to fetch forecast data!</p>";
+            }
+        }
+
+        // Load default city
+        getWeather("Rawalpindi");
+        getForecast("Rawalpindi");
+    </script>
+</body>
+
+</html>
